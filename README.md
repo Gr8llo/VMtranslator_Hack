@@ -56,7 +56,7 @@ To use the translator, execute the compiled program with a `.vm` file as input:
 
 ------
 
-# VMTranslator
+# VMTranslator(ITA)
 
 ## Obiettivo
 
