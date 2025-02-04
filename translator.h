@@ -6,8 +6,7 @@
 
 int vmToAsm(const char *codeLine, FILE *fileOut, const char *fileName);
 
-void defaultStart(FILE *fileOut);
-
-void defaultEnd(FILE *fileOut);
+void defaultStartFile(FILE *fileOut);
+void defaultStartDir(FILE *fileOut);
 
 #endif //TRANSLATOR_H

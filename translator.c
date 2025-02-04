@@ -52,8 +52,13 @@ int LogicArithmeticToAsm (const char *codeLine, FILE *file) {
     else if(strcmp(operation, "lt") == 0 ) operator = '<';
     //neg case postponed
 
-    if (operator == '+' || operator == '-' || operator == '&' || operator == '|'){
-        fprintf(file, "@SP\nAM=M-1\nD=M\nA=A-1\nM=M%cD\n", operator);
+    if (operator == '+' || operator == '&' || operator == '|'){
+        fprintf(file, "@SP\nAM=M-1\nD=M\nA=A-1\nM=D%cM\n", operator);
+        return true;
+    }
+
+    if(operator == '-') {
+        fprintf(file, "@SP\nAM=M-1\nD=M\nA=A-1\nM=M-D\n");
         return true;
     }
 
@@ -78,10 +83,17 @@ int LogicArithmeticToAsm (const char *codeLine, FILE *file) {
     return false;
 }
 
-int FlowToAsm(const char *codeLine, FILE *file) {
+int FlowToAsm(const char *codeLine, FILE *file, char functionName[]) {
     char operation[MAX];
     char destination[MAX];
     sscanf(codeLine, "%s %s", operation, destination);
+    if(strcmp(functionName, "\0") != 0) {
+        char newDest[MAX];
+        strcpy(newDest, functionName);
+        strcat(newDest, "$");
+        strcat(newDest, destination);
+        strcpy(destination, newDest);
+    }
     if (strcmp(operation, "label") == 0) fprintf(file, "(%s)\n", destination);
     else if (strcmp(operation, "goto") == 0) fprintf(file, "@%s\n0;JMP\n", destination);
     else if (strcmp(operation, "if-goto") == 0) fprintf(file, "@SP\nAM=M-1\nD=M\n@%s\nD;JNE\n", destination);
@@ -92,7 +104,7 @@ int FlowToAsm(const char *codeLine, FILE *file) {
     return true;
 }
 
-int FunctionCallToAsm(const char *codeLine, FILE *file, const char *fileName) {
+int FunctionCallToAsm(const char *codeLine, FILE *file, char functionNameForLabel[]) {
     char operation[MAX];
     char functionName[MAX];
     char parameterNum[MAX];
@@ -106,6 +118,8 @@ int FunctionCallToAsm(const char *codeLine, FILE *file, const char *fileName) {
                       "@R13\nM=M+1\n"
                       "@%s_INITIALIZATION_LOOP\n0;JMP\n"
                       "(%s_FUNCTION_START)\n" , functionName, functionName, parameterNum, functionName, functionName, functionName);
+
+        strcpy(functionNameForLabel, functionName);
     }
     else if (strcmp(operation, "call") == 0) {
         fprintf(file,
@@ -133,6 +147,7 @@ int FunctionCallToAsm(const char *codeLine, FILE *file, const char *fileName) {
             "@R13\nAM=M-1\nD=M\n@ARG\nM=D\n"
             "@R13\nAM=M-1\nD=M\n@LCL\nM=D\n"
             "@R14\nA=M\n0;JMP\n");
+        strcpy(functionNameForLabel, "\0");
     }
     else {
         printf("\033[31mUnrecognized function operation: %s\033[0m\n", operation);
@@ -150,12 +165,16 @@ int StackOperationToAsm(const char *codeLine, FILE *file, const char *fileName) 
     char commonPart[] = "D=D+M\n@R13\nM=D\n@SP\nAM=M-1\nD=M\n@R13\nA=M\nM=D\n";
 
     if (strcmp(operation, "push") == 0) {
-        if(strcmp(segment, "local")==0) fprintf(file, "@%s\nD=A\n@LCL\nA=M+D\nD=M\n", address);
-        else if(strcmp(segment, "argument")==0) fprintf(file, "@%s\nD=A\n@ARG\nA=M+D\nD=M\n", address);
-        else if(strcmp(segment, "this")==0) fprintf(file, "@%s\nD=A\n@THIS\nA=M+D\nD=M\n", address);
-        else if(strcmp(segment, "that")==0) fprintf(file, "@%s\nD=A\n@THAT\nA=M+D\nD=M\n", address);
+        if(strcmp(segment, "local")==0) fprintf(file, "@%s\nD=A\n@LCL\nA=D+M\nD=M\n", address);
+        else if(strcmp(segment, "argument")==0) fprintf(file, "@%s\nD=A\n@ARG\nA=D+M\nD=M\n", address);
+        else if(strcmp(segment, "this")==0) fprintf(file, "@%s\nD=A\n@THIS\nA=D+M\nD=M\n", address);
+        else if(strcmp(segment, "that")==0) fprintf(file, "@%s\nD=A\n@THAT\nA=D+M\nD=M\n", address);
         else if(strcmp(segment, "static")==0) fprintf(file, "@%s.%s\nD=M\n", fileName, address);
         else if(strcmp(segment, "temp")==0) fprintf(file, "@%d\nD=M\n", atoi(address)+5);
+        else if(strcmp(segment, "pointer")==0) {
+            if(strcmp(address, "0") == 0) fprintf(file, "@THIS\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n");
+            else if (strcmp(address, "1") == 0) fprintf(file, "@THAT\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n");
+        }
         else if(strcmp(segment, "constant") == 0) fprintf(file, "@%s\nD=A\n", address);
         else {
             fprintf(stderr, "\033[31mUnknown operation of push:\033[0m %s\n", segment);
@@ -170,6 +189,10 @@ int StackOperationToAsm(const char *codeLine, FILE *file, const char *fileName) 
         else if(strcmp(segment, "that")==0) fprintf(file, "@%s\nD=A\n@THAT\n%s", address, commonPart);
         else if(strcmp(segment, "static")==0) fprintf(file, "@SP\nAM=M-1\nD=M\n@%s.%s\nM=D\n", fileName, address);
         else if(strcmp(segment, "temp")==0) fprintf(file, "@SP\nAM=M-1\nD=M\n@%d\nM=D\n", atoi(address)+5);
+        else if(strcmp(segment, "pointer")==0) {
+            if(strcmp(address, "0") == 0)   fprintf(file, "@SP\nAM=M-1\nD=M\n@THIS\nM=D\n");
+            else if (strcmp(address, "1") == 0)  fprintf(file, "@SP\nAM=M-1\nD=M\n@THAT\nM=D\n");
+        }
         else {
             fprintf(stderr, "\033[31mUnknown operation of pop:\033[0m %s\n", segment);
             return false;
@@ -184,13 +207,14 @@ int StackOperationToAsm(const char *codeLine, FILE *file, const char *fileName) 
 
 int vmToAsm(const char *codeLine, FILE *fileOut, const char *fileName) {
     const char commandType = getCommandType(codeLine);
+    static char functionName[MAX]="\0";
     switch (commandType) {
         case 'L':
             return LogicArithmeticToAsm(codeLine, fileOut);
         case 'F':
-            return FlowToAsm(codeLine, fileOut);
+            return FlowToAsm(codeLine, fileOut, functionName);
         case 'C':
-            return FunctionCallToAsm(codeLine, fileOut, fileName);
+            return FunctionCallToAsm(codeLine, fileOut, functionName);
         case 'P':
             return StackOperationToAsm(codeLine, fileOut, fileName);
         case 'E':
@@ -199,10 +223,20 @@ int vmToAsm(const char *codeLine, FILE *fileOut, const char *fileName) {
     }
 };
 
-void defaultStart(FILE *fileOut) {
+void defaultStartFile(FILE *fileOut) {
     fprintf(fileOut, "@256\nD=A\n@SP\nM=D\n");
 }
 
-void defaultEnd(FILE *fileOut) {
-    fprintf(fileOut, "(END_OF_PROGRAM)\n@END_OF_PROGRAM\n0;JMP\n");
+void defaultStartDir(FILE *fileOut){
+    fprintf(fileOut, "@256\nD=A\n@SP\nM=D\n");
+    fprintf(fileOut,"@FUNCTION_RETURN_SYS_INIT\nD=A\n@SP\nA=M\nM=D\n@SP\nM=M+1\n"
+                           "@LCL\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n"
+                           "@ARG\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n"
+                           "@THIS\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n"
+                           "@THAT\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n"
+
+                           "@0\nD=A\n@SP\nD=M-D\n@5\nD=D-A\n@ARG\nM=D\n"
+                           "@SP\nD=M\n@LCL\nM=D\n"
+                           "@Sys.init\n0;JMP\n"
+                           "(FUNCTION_RETURN_SYS_INIT)\n");
 }

@@ -6,4 +6,6 @@
 
 char* setup(const char *inputFile);
 
+int checkExtension(const char *inputFile);
+
 #endif

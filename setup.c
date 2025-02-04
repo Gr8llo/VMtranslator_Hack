@@ -9,11 +9,11 @@
 int checkExtension(const char *inputFile) {
     const char *dot = strrchr(inputFile, '.');
     if(dot == NULL) {
-        fprintf(stderr, "Invalid extension");
+        fprintf(stderr, "Invalid extension\n");
         return false;
     }
     if(strcmp(dot, ".vm") != 0) {
-        fprintf(stderr, "Invalid extension");
+        fprintf(stderr, "Invalid extension\n");
         return false;
     }
     return true;
@@ -21,7 +21,6 @@ int checkExtension(const char *inputFile) {
 
 char *setup (const char *inputFile){
     if(!checkExtension(inputFile)) {
-           fprintf(stderr, "Invalid extension ");
            return NULL;
     }//check extension
 
